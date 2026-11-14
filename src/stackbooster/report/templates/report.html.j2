@@ -1,0 +1,152 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Migration plan: {{ project_name }}</title>
+<style>
+  :root { --bg: #fafaf8; --fg: #1d1d1f; --muted: #6b6b70; --line: #e2e2de; --card: #ffffff;
+          --accent: #2457c5; --high: #b3261e; --medium: #a15c00; --low: #4b6b2f; }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg: #17171a; --fg: #ececef; --muted: #a0a0a8; --line: #2e2e34; --card: #1f1f24;
+            --accent: #7aa2ff; --high: #ff8a80; --medium: #ffb74d; --low: #aed581; }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--fg);
+         font: 15px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif; }
+  header, main { max-width: 1100px; margin: 0 auto; padding: 16px; }
+  header h1 { margin: 8px 0 4px; font-size: 1.6rem; }
+  .muted { color: var(--muted); }
+  .stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 8px; margin: 16px 0; }
+  .stat { background: var(--card); border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px; }
+  .stat b { display: block; font-size: 1.4rem; }
+  nav.tabs { display: flex; flex-wrap: wrap; gap: 6px; margin: 16px 0; }
+  nav.tabs button { border: 1px solid var(--line); background: var(--card); color: var(--fg);
+                    padding: 6px 12px; border-radius: 999px; cursor: pointer; font: inherit; }
+  nav.tabs button[aria-selected="true"] { border-color: var(--accent); color: var(--accent); }
+  section[role="tabpanel"][hidden] { display: none; }
+  .table-wrap { overflow-x: auto; }
+  table { width: 100%; border-collapse: collapse; background: var(--card); margin: 8px 0 20px; }
+  th, td { text-align: left; padding: 6px 8px; border-bottom: 1px solid var(--line); vertical-align: top; }
+  th { font-weight: 600; font-size: 0.85rem; color: var(--muted); }
+  code { font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 0.85em; }
+  .sev-high { color: var(--high); font-weight: 600; }
+  .sev-medium { color: var(--medium); font-weight: 600; }
+  .sev-low { color: var(--low); }
+  .note { color: var(--muted); font-size: 0.9em; margin: 2px 0 0; }
+  input[type=search] { width: 100%; max-width: 360px; padding: 6px 10px; border: 1px solid var(--line);
+                       border-radius: 6px; background: var(--card); color: var(--fg); font: inherit; }
+  pre { background: var(--card); border: 1px solid var(--line); padding: 12px; overflow-x: auto; border-radius: 6px; }
+</style>
+</head>
+<body>
+<header>
+  <p class="muted">stackbooster {{ version }} &middot; {{ generated }}{% if live %} &middot; <a href="/">re-scan</a> &middot; <a href="/api/sitemap.json">sitemap.json</a> &middot; <a href="/api/plan.json">plan.json</a>{% endif %}</p>
+  <h1>Migration plan: {{ project_name }}</h1>
+  <p class="muted">Target: {{ plan.target.label }}. {{ plan.items | length }} plan items ({{ effort.S }} small, {{ effort.M }} medium, {{ effort.L }} large).</p>
+  <div class="stats">
+    <div class="stat"><b>{{ summary.routes }}</b>backend routes</div>
+    <div class="stat"><b>{{ summary.pages }}</b>pages</div>
+    <div class="stat"><b>{{ summary.forms }}</b>forms</div>
+    <div class="stat"><b>{{ summary.ajax_calls }}</b>AJAX calls</div>
+    <div class="stat"><b>{{ summary.tables }}</b>tables</div>
+    <div class="stat"><b>{{ risk_counts.high }}</b>high risks</div>
+  </div>
+</header>
+<main>
+  <nav class="tabs" role="tablist">
+    <button role="tab" aria-selected="true" data-tab="plan">Plan</button>
+    <button role="tab" aria-selected="false" data-tab="backend">Backend</button>
+    <button role="tab" aria-selected="false" data-tab="frontend">Frontend</button>
+    <button role="tab" aria-selected="false" data-tab="database">Database</button>
+    <button role="tab" aria-selected="false" data-tab="risks">Risks ({{ plan.risks | length }})</button>
+    <button role="tab" aria-selected="false" data-tab="graph">Graph</button>
+  </nav>
+  <input type="search" id="filter" placeholder="Filter rows..." aria-label="Filter rows">
+
+  <section role="tabpanel" id="tab-plan">
+  {% for key, title, blurb, items in phases %}
+    <h2>Phase {{ loop.index }}: {{ title }}</h2>
+    <p class="muted">{{ blurb }}</p>
+    <div class="table-wrap"><table class="filterable">
+      <tr><th>Legacy</th><th>Becomes</th><th>File</th><th>Effort</th></tr>
+      {% for i in items %}
+      <tr><td><code>{{ i.legacy_id }}</code></td>
+          <td>{{ i.summary }}{% for n in i.notes %}<p class="note">{{ n }}</p>{% endfor %}</td>
+          <td><code>{{ i.target_file }}</code></td><td>{{ i.effort }}</td></tr>
+      {% endfor %}
+    </table></div>
+  {% endfor %}
+  </section>
+
+  <section role="tabpanel" id="tab-backend" hidden>
+    <div class="table-wrap"><table class="filterable">
+      <tr><th>Route</th><th>Methods</th><th>Params</th><th>Tables</th><th>Responds with</th></tr>
+      {% for r in site.routes %}
+      <tr><td><code>{{ r.id }}</code><p class="note">{{ r.file }}{% if r.line %}:{{ r.line }}{% endif %}</p></td>
+          <td>{{ r.methods | join(", ") }}</td>
+          <td>{% for p in r.params %}<code>{{ p.name }}</code> <span class="muted">{{ p.source }}</span>{{ ", " if not loop.last }}{% endfor %}</td>
+          <td>{{ r.tables | join(", ") }}</td>
+          <td>{{ r.responses | join(", ") }}{% if r.uses_session %}, session{% endif %}</td></tr>
+      {% endfor %}
+    </table></div>
+  </section>
+
+  <section role="tabpanel" id="tab-frontend" hidden>
+    <div class="table-wrap"><table class="filterable">
+      <tr><th>Page</th><th>Title</th><th>Forms</th><th>Calls / links to backend</th></tr>
+      {% for p in site.pages %}
+      <tr><td><code>{{ p.id }}</code>{% if p.partial %} <span class="muted">(partial)</span>{% endif %}</td>
+          <td>{{ p.title or "" }}</td>
+          <td>{% for f in p.forms %}<div>{{ f.method }} <code>{{ f.action or "(self)" }}</code>: {{ f.fields | map(attribute="name") | join(", ") }}</div>{% endfor %}</td>
+          <td>{% for l in site.links_from(p.id) if l.kind != "link" %}<div>{{ l.kind }} {{ l.method }} <code>{{ l.target }}</code>{% if not l.resolved %} <span class="sev-low">unresolved</span>{% endif %}</div>{% endfor %}</td></tr>
+      {% endfor %}
+    </table></div>
+  </section>
+
+  <section role="tabpanel" id="tab-database" hidden>
+    {% for t in site.tables %}
+    <h3><code>{{ t.name }}</code> <span class="muted">{{ t.engine or "" }} &middot; {{ t.file }}</span></h3>
+    <div class="table-wrap"><table class="filterable">
+      <tr><th>Column</th><th>Type</th><th>Null</th><th>Default</th><th>Key</th></tr>
+      {% for c in t.columns %}
+      <tr><td>{{ c.name }}</td><td><code>{{ c.type }}{% if c.length %}({{ c.length }}){% endif %}{% if c.enum_values %}({{ c.enum_values | join(", ") }}){% endif %}</code></td>
+          <td>{{ "yes" if c.nullable else "no" }}</td><td>{{ c.default if c.default is not none else "" }}</td>
+          <td>{{ "PK" if c.primary_key else "" }}{% for fk in t.foreign_keys if c.name in fk.columns %} FK &rarr; {{ fk.ref_table }}{% if fk.inferred %} (inferred){% endif %}{% endfor %}</td></tr>
+      {% endfor %}
+    </table></div>
+    {% endfor %}
+  </section>
+
+  <section role="tabpanel" id="tab-risks" hidden>
+    <div class="table-wrap"><table class="filterable">
+      <tr><th>Severity</th><th>Category</th><th>Where</th><th>What</th></tr>
+      {% for r in plan.risks %}
+      <tr><td class="sev-{{ r.severity }}">{{ r.severity }}</td><td>{{ r.category }}</td><td><code>{{ r.where }}</code></td><td>{{ r.message }}</td></tr>
+      {% endfor %}
+    </table></div>
+    {% if plan.unused_tables %}<p>Unused tables: {{ plan.unused_tables | join(", ") }}</p>{% endif %}
+    {% if site.warnings %}<h3>Analyzer warnings</h3><ul>{% for w in site.warnings %}<li>{{ w }}</li>{% endfor %}</ul>{% endif %}
+  </section>
+
+  <section role="tabpanel" id="tab-graph" hidden>
+    <p class="muted">Mermaid source. Paste it into any Mermaid viewer, or a Markdown file on GitHub.</p>
+    <pre>{{ mermaid }}</pre>
+  </section>
+</main>
+<script>
+  const tabs = document.querySelectorAll('[role="tab"]');
+  tabs.forEach((tab) => tab.addEventListener("click", () => {
+    tabs.forEach((t) => t.setAttribute("aria-selected", String(t === tab)));
+    document.querySelectorAll('[role="tabpanel"]').forEach((p) => { p.hidden = p.id !== "tab-" + tab.dataset.tab; });
+  }));
+  document.getElementById("filter").addEventListener("input", (e) => {
+    const q = e.target.value.toLowerCase();
+    document.querySelectorAll("table.filterable tr").forEach((row, i) => {
+      if (row.querySelector("th")) return;
+      row.style.display = row.textContent.toLowerCase().includes(q) ? "" : "none";
+    });
+  });
+</script>
+</body>
+</html>
